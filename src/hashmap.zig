@@ -127,16 +127,16 @@ pub fn Map32(
         }
 
         pub fn clone(self: *Self, allocator: std.mem.Allocator) !Self {
-            const dstsandfps = try allocator.dupe(u8, self.dsts[0 .. (self.size + 32) * 32]);
+            const dstsandfps = try allocator.dupe(u8, self.dsts[0 .. (self.size + 32) * 2]);
             errdefer allocator.free(dstsandfps);
 
-            const arr = (try allocator.dupe(Kv, self.arr[0..self.size])).ptr;
+            const arr = try allocator.dupe(Kv, self.arr[0..self.size]);
             errdefer allocator.free(arr);
 
             var cloned = self.*;
             cloned.dsts = dstsandfps[0 .. dstsandfps.len / 2].ptr;
             cloned.fps = dstsandfps[dstsandfps.len / 2 ..].ptr;
-            cloned.arr = arr;
+            cloned.arr = arr.ptr;
             cloned.allocator = allocator;
             return cloned;
         }
@@ -256,9 +256,9 @@ pub fn Map32(
             const elemdsts: @Vector(32, u8) = self.dsts[entrySlot..][0..32].*;
             const maxhf0dst: @Vector(32, u8) = @splat(0b0101_1111);
 
-            var marker: usize = tombstoneMarker;
-            if (@reduce(.And, elemdsts < maxhf0dst)) {
-                marker = emptyMarker;
+            var marker: usize = emptyMarker;
+            if (@reduce(.Or, elemdsts >= maxhf0dst)) {
+                marker = tombstoneMarker;
             }
 
             // Mark it
@@ -268,6 +268,7 @@ pub fn Map32(
             }
             self.len -= 1;
             self.tombstones += marker >> 7; // marked as tombstone?
+
             return true;
         }
 
@@ -321,6 +322,12 @@ pub fn Map32(
                     const allZeroes: @Vector(32, u8) = @splat(0);
                     const empties: u64 = @as(u32, @bitCast(elemdsts == allZeroes));
                     var firstLesser: u64 = @ctz(empties);
+
+                    // When placing into empties don't do it for the very last possible slot.
+                    // This massively boosts the optimization in remove()
+                    if (firstLesser == 31) {
+                        firstLesser = 32;
+                    }
 
                     var fingerprint = hashslot & 0b1111_1111;
                     var evicted = false;
@@ -409,6 +416,17 @@ pub fn Map32(
                                 hash = self.ctx.hash(k); // TODO: This is kind of sad. Maybe we should just hash the preferred slot idx + fingerprint for hf2?
                             }
 
+                            // There's a point when a man's gotta rehash. If we need to look for a placement all the way
+                            // from the secondary hash function then we gotta ask ourselves: "Is it time?"
+                            // Please note that tombstones tend to accumulate extremely slowly thanks to the optimization
+                            // in remove()
+                            if (self.tombstones * 32 >= self.size) {
+                                @branchHint(.unlikely);
+                                // std.debug.print("rehash: {} {} {}\n", .{ self.len, self.size, self.tombstones });
+                                self.rehash();
+                                continue :loop 2;
+                            }
+
                             // Try with the next hash fn?
                             const hfnum = (mydsts[0] >> 6) & 0b11;
                             if (hfnum == 0b01) {
@@ -417,13 +435,6 @@ pub fn Map32(
                                 continue :loop 0;
                             }
                         },
-                    }
-
-                    // tombstones? rehash?
-                    if (self.tombstones >= self.size / 4) {
-                        // std.debug.print("rehash: {} {} {}\n", .{ self.len, self.size, self.tombstones });
-                        self.rehash();
-                        continue :loop 2;
                     }
 
                     continue :loop 1;
@@ -462,19 +473,28 @@ pub fn Map32(
             const fps = self.fps;
             const arr = self.arr;
 
-            // Mark all present slots with a special value so that we know
+            // Rehash algorithm: try to avoid doing much work by only moving
+            // the entries that are far from their optimal slot. This primarily
+            // means that we try to rehash just the entries currently placed with hf2.
+            // But for synergy with remove() we also try to move hf0 (dst>=31) entries.
+            // For sensible load factors (<90%) this is a huge optimization as only
+            // a small percentage of entries needs to be hashed/moved.
+
+            // Mark all interesting slots with a special value so that we know
             // that they are still "unplaced" so that the loop knows which entries still
             // need to be inspected for moving. We re-use the tombstoneMarker for this.
             // Also set tombstones to empties.
             {
                 const allZeroes: @Vector(32, u8) = @splat(0);
                 const allTombstones: @Vector(32, u8) = @splat(tombstoneMarker);
+                const interestingDistance: @Vector(32, u8) = @splat(0b0101_1111);
 
                 var offset: usize = 0;
                 while (offset < size) : (offset += 32) {
                     var gdsts: @Vector(32, u8) = dsts[offset..][0..32].*;
+
                     gdsts = @select(u8, gdsts == allTombstones, allZeroes, gdsts); // tombies to zeroes
-                    gdsts = @select(u8, gdsts != allZeroes, allTombstones, allZeroes); // nonzeroes to tombies
+                    gdsts = @select(u8, gdsts >= interestingDistance, allTombstones, gdsts); // long distances to tombies
                     dsts[offset..][0..32].* = gdsts;
                 }
             }
@@ -487,16 +507,16 @@ pub fn Map32(
             while (offset < size) : (offset += 32) {
                 const gdsts: @Vector(32, u8) = dsts[offset..][0..32].*;
 
-                // Go through all the unplaced entries that we see
+                // Go through all the interesting entries that we see
                 const allTombstones: @Vector(32, u8) = @splat(tombstoneMarker);
-                var presents: u64 = @as(u32, @bitCast((gdsts == allTombstones)));
+                var presents: u64 = @as(u32, @bitCast(gdsts == allTombstones));
                 bigloop: while (true) : (presents &= presents - 1) {
                     const slotInBucket = @ctz(presents);
                     if (slotInBucket >= 32) {
                         break;
                     }
 
-                    // double check that this slot is still "unplaced"
+                    // double check that this slot is still interesting
                     if (dsts[offset + slotInBucket] != tombstoneMarker) {
                         continue;
                     }
@@ -505,41 +525,32 @@ pub fn Map32(
                     dsts[offset + slotInBucket] = 0; // WE ARE LEAVING.
 
                     kvloop: while (true) {
-                        var hash = self.ctx.hash(kv.key);
+                        const hash = self.ctx.hash(kv.key);
                         var hf: usize = 1;
                         while (hf <= 3) {
                             const hashslot = rotl(u64, hash, (hf >> 1) * 32);
                             var slot = hashreduce(hashslot, size);
                             var dst: u64 = (hf << 6) | (0 << 0);
-                            var fingerprint: u64 = hashslot & 0b1111_1111;
-                            var evicted = false;
+                            const fingerprint: u64 = hashslot & 0b1111_1111;
                             while (true) {
                                 const elemdst: u64 = dsts[slot];
-                                const elemfp: u64 = fps[slot];
                                 if (elemdst < dst or elemdst == tombstoneMarker) {
                                     dsts[slot] = @intCast(dst);
                                     fps[slot] = @intCast(fingerprint);
-                                    if (slot < 32) { // update the trailing repeat byte
-                                        dsts[size + slot] = @intCast(dst);
-                                        fps[size + slot] = @intCast(fingerprint);
-                                    }
+
+                                    // NOTE: we don't maintain the trailing bytes here but instead we correct
+                                    // them afterwards
 
                                     const entry = &arr[slot];
                                     std.mem.swap(Kv, kv, entry);
 
-                                    evicted = true;
-                                    fingerprint = elemfp;
-                                    dst = elemdst;
                                     if (elemdst == 0) {
                                         // the slot was empty
                                         continue :bigloop;
                                     }
-                                    if (elemdst == tombstoneMarker) {
-                                        // The slot had an "unplaced" entry that we now evicted.
-                                        // Now that entry is stored in kv and we need
-                                        // to find a slot for it.
-                                        continue :kvloop;
-                                    }
+
+                                    // Just do a full probing for it
+                                    continue :kvloop;
                                 }
 
                                 dst += 1 << 0;
@@ -556,14 +567,15 @@ pub fn Map32(
 
                             hf = dst >> 6;
                             hf += 2;
-                            if (evicted) {
-                                hash = self.ctx.hash(kv.key);
-                            }
                         }
                         unreachable; // ??? impossibru !!!
                     }
                 }
             }
+
+            // ensure good trailing bytes
+            @memcpy(dsts[size..][0..32], dsts[0..32]);
+            @memcpy(fps[size..][0..32], fps[0..32]);
 
             self.tombstones = 0;
             return;
@@ -631,10 +643,9 @@ pub fn Map32(
                             if (elemdst <= dst) {
                                 dsts[slot] = @intCast(dst);
                                 fps[slot] = @intCast(fingerprint);
-                                if (slot < 32) { // update the trailing repeat byte
-                                    dsts[newSize + slot] = @intCast(dst);
-                                    fps[newSize + slot] = @intCast(fingerprint);
-                                }
+
+                                // NOTE: we don't maintain the trailing bytes here but instead we correct
+                                // them afterwards
 
                                 const entry = &arr[slot];
                                 std.mem.swap(Kv, kv, entry);
@@ -670,6 +681,10 @@ pub fn Map32(
                     unreachable; // ??? impossibru !!!
                 }
             }
+
+            // ensure good trailing bytes
+            @memcpy(dsts[newSize..][0..32], dsts[0..32]);
+            @memcpy(fps[newSize..][0..32], fps[0..32]);
 
             self.allocator.free(self.dsts[0 .. (oldSize + 32) * 2]);
             self.allocator.free(self.arr[0..oldSize]);
@@ -1511,7 +1526,9 @@ pub fn Promenade(comptime K: type, comptime V: type) type {
 const maptype = Map32(u64, u64, std.hash_map.AutoContext(u64), 100);
 
 test "simple map test" {
-    var map = maptype.init(std.testing.allocator);
+    const maptype2 = Map32(u64, u64, std.hash_map.AutoContext(u64), 100);
+
+    var map = maptype2.init(std.testing.allocator);
     defer map.deinit();
 
     for (0..100000) |i| {

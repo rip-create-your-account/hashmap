@@ -2,6 +2,8 @@
 
 This open addressing hash map provides O(1) worst-case lookups, updates and removes while consistently achieving 100% load factor even for huge hash maps. Filling the map to 100% load factor is worst-case O(N log N) with high probability for success. Filling to 100% load factor can fail.
 
+Please read [the Get() implementation](src/hashmap.zig#155). Please ignore [the Put() implementation](src/hashmap.zig#275).
+
 This hash map combines Robin Hood hashing and 2-choice hashing. Keys are first placed using Robin Hood hashing. If a key can't be placed within 32 slots of its optimal slot then a secondary hash function is used to determine the secondary optimal slot. When keys are placed with the secondary hash function the Robin Hood hashing will always consider their distance from the optimal slot to be higher than that of those placed with the primary hash function. This priority given to the placement with secondary hash function ends up shifting the keys around such that all empty slots are purged.
 
 Removes use tombstones. If there has been any removes then achieving 100% load factor becomes unlikely and usually the map achieves only 99.9% load factor before resize/rehash. Thanks to an optimization we sometimes get away with just marking the slot as empty.

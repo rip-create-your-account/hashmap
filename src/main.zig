@@ -217,6 +217,8 @@ pub fn main() !void {
         // rehash benchmark
         const targetLen = 1 * 1000 * 1000;
         var refmap = try maptype.initForLen(gpa.allocator(), targetLen);
+        defer refmap.deinit();
+
         {
             for (0..targetLen) |k| {
                 try refmap.put(k, k);
