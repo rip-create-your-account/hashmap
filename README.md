@@ -154,7 +154,7 @@ But now I really want to see how the placement of entries evolves as the inserti
 
 https://github.com/user-attachments/assets/0ffca259-bb89-471e-a924-c5354bd2b80b
 
-Woah! Just at look at the `100%` table! Watch how the very last ~10 inserts cause thousands of entries to move to different distances! The whole thing just shifts massively. That's disgusting wtf. That's a lot of moves happening for so little gain. All was good up to 99.999% load and then BAM! This explains why the insertion time for `100%` is 2x of `99%`'s. Well, it is what it is. *Or is it?* More on that later.
+Woah! Just look at the `100%` table! Watch how the very last ~10 inserts cause thousands of entries to move to different distances! The whole thing just shifts massively. That's disgusting wtf. That's a lot of moves happening for so little gain. All was good up to 99.999% load and then BAM! This explains why the insertion time for `100%` is 2x of `99%`'s. Well, it is what it is. *Or is it?* More on that later.
 
 ## Lookups
 
@@ -551,7 +551,7 @@ But doing it with window size of just 1 produces some crazy results.
 
 https://github.com/user-attachments/assets/0997b0ed-0e3f-43da-a865-5836301b9e52
 
-That's 2<sup>27</sup> entries at various hash table sizes. For the one configured for `99%` load factor there's just 4 slots that we would need to inspect for 99.999% of lookups. Consider that log2(log2(2<sup>27</sup>)) ~= 4.75. Coincidence? I think not.
+That's 2<sup>27</sup> entries at various hash table sizes. For the one configured for `99%` load factor there's just 2*4 slots that we would need to inspect for 99.999% of lookups. Consider that log2(log2(2<sup>27</sup>)) ~= 4.75. Coincidence? I think not.
 
 ### Fingerprints
 
