@@ -1,6 +1,6 @@
 # Robin Hood hashing for modern audiences
 
-👨 35 min read — 🦲 55 min read — 👶 7 min read — ⛄ 613 min melting in the 🌞
+👨 35 min read — 🦲 55 min read — 👶 7 min read — ⛄ 613 min melting in the 🌞 [Jump to conclusion](#conclusion).
 
 Have you ever tried filling your open-addressing hash table of `N` slots all the way up to 100% load factor? Not a single empty slot in sight! Did it accidentally take `O(N * N)` time? Well, with Robin Hood hashing and random probing it would have taken just `O(N log N)` time with high probability. The Greats figured this out already in the 80s. Today we will first empirically validate their claim and then we explore how to make it more than just theoretically interesting.
 
