@@ -508,7 +508,7 @@ const pos = minpos[1]; // its index in the vector
 
 Robin Hood hashing with random probing has been neglected for decades. But today we added linearly probed windows to it. Then we reversed the order of `distance` inside the linearly probed windows. The lookups now test such a small number of slots that they are in a practical sense `worst-case O(1)` even at 100% load. And for insertions me, myself and I conjencture that we still maintain that original `O(N log N)` promise for filling the table to 100% load. And since this technique is still at its core just a form of Robin Hood hashing we can enjoy many of its familiar auxiliary properties if we so wish.
 
-[This implementation](https://zig.godbolt.org/z/aqxdqPY6f) works as a great starting point on how to implement this hash table with a specific situation in mind. It includes all of the important lessons learned here and some implementation tricks.
+[This implementation](https://zig.godbolt.org/z/aqxdqPY6f) works as a great starting point on how to implement this hash table with a specific situation in mind. It includes all of the important lessons learned here and some implementation tricks. Alternatively, [here's](https://zig.godbolt.org/z/Eh39xaMoW) a general-purpose implementation to take inspiration from.
 
 ## Bonus content
 
