@@ -503,6 +503,11 @@ const minpos = @"llvm.x86.sse41.phminposuw"(table.distances[slot..][0..8]);
 const min = minpos[0]; // smallest dst value
 const pos = minpos[1]; // its index in the vector
 ```
+I think here it would be relevant to show how Robin Hood hashing with _linear_ probing compares. To fill a linear probing Robin Hood hash table of 2<sup>16</sup> slots to 100% I needed to do 7586529 evictions. That's ~116 evictions per insert! Below is what that looks like.
+
+https://github.com/user-attachments/assets/c246b0f5-70b2-45bc-b3da-618ccd7af802
+
+And the 90% case needed 160359 evictions for those 2<sup>16</sup> inserts. That's still ~100x more evictions than what _random_ probing with our enchancements needs in the same situation. Consider that the Rust std `HashMap` [used to be](https://github.com/rust-lang/rust/issues/38003) a linear probing Robin Hood hash table configured to achieve ~90% load factor.
 
 ## Conclusion
 
