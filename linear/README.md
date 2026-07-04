@@ -5,23 +5,23 @@ Linear hashing is a technique for enabling incremental adjustements to the capac
 * Ability to maintain the target load factor at ALL times - not just resize at some max load factor.
 * Significantly reduced tail latency for all operations.
 
-What we present here is Linear Hashing combined with our algorithm so that we get incremental resizing both in time and in memory use.
+What we present here is Linear Hashing combined with our [main algorithm](../README.md) such that we achieve incremental resizing both in time and in memory use. Unlike many implementations of Linear Hashing, ours is open addressing without linked lists or overflow stashes.
 
 Let's look at what memory use looks like for your average open addressing hash table that grows by allocating a new table with 2x capacity and then moves all entries over to it in a big `O(table_size)` operation.
 
 https://github.com/user-attachments/assets/42fe02bd-49b8-497e-87de-98e09f9b04ba
 
-You can see how the each time the unused capacity gets down to ~10% the table grows by 2x. But we can also see how we end up with ~3x more reserved physical memory than what we would strictly need. This is because the table grows by 2x, leading to unused space, and because our `Allocator` decides to never release the memory of the smaller tables back to the OS.
+You can see how the each time the unused capacity gets down to ~10% the table grows by 2x. Observe how we end up with ~3x more reserved physical memory than what we would strictly need. This is because the table grows by 2x, leading to unused space, and because our `Allocator` decides to never release the memory of the smaller tables back to the OS.
 
 Let's look at how our linear hashing does it.
 
 https://github.com/user-attachments/assets/12f71fa5-bb8f-4b35-87e9-2dff5682ce42
 
-Nice. Observe how the "capacity" of the table is always exactly at 20% unused space. Each `insert()` also does a little resizing work to increase the capacity of the hash table just enough to always remain at the target load factor. And because of the memory-access patterns of linear hashing the OS is able to map in the physical memory very precisely on-demand.
+Nice. Observe how the table capacity is always exactly at 20% unused space. Each `insert()` also does a little resizing work to increase the capacity of the hash table just enough to always remain at the target load factor. And because of the memory-access patterns of linear hashing the OS is able to map in the physical memory very precisely on-demand.
 
 ### Shrinking
 
-https://github.com/user-attachments/assets/1b6ec11e-2255-44cf-a91a-175a1724ddd3
+https://github.com/user-attachments/assets/6ff58758-b0be-4473-a95b-652f66fb13aa
 
 Here we insert 2<sup>19</sup> entries to the hash table and then start removing entries. For each remove linear hashing will also shrink the capacity such that it maintains the target of 11.1% unused space in the table. The implementation also occasionally calls `madvise(MADV_DONTNEED)` to release the physical memory back to the OS.
 
