@@ -1,6 +1,6 @@
 ## Linear hashing
 
-Linear hashing is a technique for enabling incremental adjustements to the capacity of the hash table. It enables each individual `insert()` to also grow the hash table by a little and for each `remove()` to also shrink the hash table by a little. This means:
+Linear hashing is a technique for enabling incremental adjustments to the capacity of the hash table. It enables each individual `insert()` to also grow the hash table by a little and for each `remove()` to also shrink the hash table by a little. This means:
 * No `O(table_size)` grow/resize/shrink operations.
 * Ability to maintain the target load factor at ALL times - not just resize at some max load factor.
 * Significantly reduced tail latency for all operations.
